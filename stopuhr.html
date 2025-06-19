@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Fallzeit & Luftwiderstand Rechner</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 40px;
+      background-color: #f4f4f4;
+    }
+    input {
+      padding: 8px;
+      margin: 5px;
+      width: 200px;
+    }
+    button {
+      font-size: 3.6em;
+      padding: 10px 20px;
+      margin-top: 20px;
+      background-color: #007acc;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #005fa3;
+    }
+    #time, #height {
+      font-size: 1.8em;
+      margin: 20px 0;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Stoppuhr & Fallhöhen-Rechner (mit Luftwiderstand)</h1>
+
+  <div>
+    <input type="number" id="diameter" step="0.001" placeholder="Durchmesser (m)">
+    <br>
+    <input type="number" id="mass" step="0.01" placeholder="Masse (kg)">
+  </div>
+
+  <div id="time">0.00 s</div>
+  <button id="startStopBtn">Start</button>
+  <div id="height"></div>
+
+  <script>
+    let startTime;
+    let interval;
+    let running = false;
+
+    const g = 9.81; // m/s²
+    const rho = 1.225; // kg/m³ (Luftdichte)
+    const cw = 0.47; // Kugelförmiges Objekt
+
+    const timeDisplay = document.getElementById("time");
+    const heightDisplay = document.getElementById("height");
+    const button = document.getElementById("startStopBtn");
+
+    function formatTime(ms) {
+      return (ms / 1000).toFixed(2) + " s";
+    }
+
+    function calculateVacuumHeight(t) {
+      return (0.5 * g * t * t).toFixed(2);
+    }
+
+    function calculateHeightWithAirResistance(t, mass, diameter) {
+      const A = Math.PI * Math.pow(diameter / 2, 2); // Querschnittsfläche
+      let dt = 0.01;
+      let h = 0;
+      let v = 0;
+      let time = 0;
+
+      while (time < t) {
+        let Fg = mass * g;
+        let Fd = 0.5 * cw * rho * A * v * v;
+        if (v > 0) Fd *= -1;
+        let a = (Fg + Fd) / mass;
+        v += a * dt;
+        h += v * dt;
+        time += dt;
+      }
+      return h.toFixed(2);
+    }
+
+    button.addEventListener("click", () => {
+      if (!running) {
+        // Start
+        running = true;
+        heightDisplay.textContent = "";
+        button.textContent = "Stopp";
+        startTime = Date.now();
+        interval = setInterval(() => {
+          const elapsed = Date.now() - startTime;
+          timeDisplay.textContent = formatTime(elapsed);
+        }, 10);
+      } else {
+        // Stopp
+        running = false;
+        clearInterval(interval);
+        const totalTime = (Date.now() - startTime) / 1000;
+        timeDisplay.textContent = totalTime.toFixed(2) + " s";
+
+        const diameter = parseFloat(document.getElementById("diameter").value);
+        const mass = parseFloat(document.getElementById("mass").value);
+
+        let height;
+        if (!isNaN(diameter) && !isNaN(mass)) {
+          height = calculateHeightWithAirResistance(totalTime, mass, diameter);
+          heightDisplay.textContent = `Fallhöhe (mit Luftwiderstand): ${height} m`;
+        } else {
+          height = calculateVacuumHeight(totalTime);
+          heightDisplay.textContent = `Fallhöhe (im Vakuum): ${height} m`;
+        }
+
+        button.textContent = "Start";
+      }
+    });
+  </script>
+
+</body>
+</html>
