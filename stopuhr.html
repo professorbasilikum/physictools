@@ -2,6 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>Fallzeit & Luftwiderstand Rechner</title>
   <style>
     body {
@@ -9,28 +10,32 @@
       text-align: center;
       padding: 40px;
       background-color: #f4f4f4;
+      font-size: 1.5em;
     }
     input {
-      padding: 8px;
-      margin: 5px;
-      width: 200px;
+      padding: 16px;
+      margin: 10px;
+      width: 80%;
+      max-width: 300px;
+      font-size: 1em;
     }
     button {
-      font-size: 3.6em;
-      padding: 10px 20px;
-      margin-top: 20px;
+      font-size: 2em;
+      padding: 20px 40px;
+      margin-top: 30px;
       background-color: #007acc;
       color: white;
       border: none;
-      border-radius: 8px;
+      border-radius: 12px;
       cursor: pointer;
+      touch-action: manipulation;
     }
     button:hover {
       background-color: #005fa3;
     }
     #time, #height {
       font-size: 1.8em;
-      margin: 20px 0;
+      margin: 30px 0;
     }
   </style>
 </head>
@@ -53,9 +58,9 @@
     let interval;
     let running = false;
 
-    const g = 9.81; // m/s²
-    const rho = 1.225; // kg/m³ (Luftdichte)
-    const cw = 0.47; // Kugelförmiges Objekt
+    const g = 9.81;
+    const rho = 1.225;
+    const cw = 0.47;
 
     const timeDisplay = document.getElementById("time");
     const heightDisplay = document.getElementById("height");
@@ -70,7 +75,7 @@
     }
 
     function calculateHeightWithAirResistance(t, mass, diameter) {
-      const A = Math.PI * Math.pow(diameter / 2, 2); // Querschnittsfläche
+      const A = Math.PI * Math.pow(diameter / 2, 2);
       let dt = 0.01;
       let h = 0;
       let v = 0;
@@ -88,9 +93,9 @@
       return h.toFixed(2);
     }
 
-    button.addEventListener("click", () => {
+    // Direkter Touchstart, um Delay zu vermeiden
+    function handleStartStop() {
       if (!running) {
-        // Start
         running = true;
         heightDisplay.textContent = "";
         button.textContent = "Stopp";
@@ -100,7 +105,6 @@
           timeDisplay.textContent = formatTime(elapsed);
         }, 10);
       } else {
-        // Stopp
         running = false;
         clearInterval(interval);
         const totalTime = (Date.now() - startTime) / 1000;
@@ -120,7 +124,16 @@
 
         button.textContent = "Start";
       }
-    });
+    }
+
+    // Touchstart für sofortige Reaktion
+    button.addEventListener("touchstart", function (e) {
+      e.preventDefault(); // verhindert Doppelauslösung
+      handleStartStop();
+    }, { passive: false });
+
+    // Fallback für Desktop (Maus)
+    button.addEventListener("click", handleStartStop);
   </script>
 
 </body>
