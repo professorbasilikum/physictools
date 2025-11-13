@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Artillery Duel Text Game</title>
+  <style>
+    body { font-family: monospace; background: #111; color: #0f0; padding: 20px; }
+    input { background: #000; color: #0f0; border: none; width: 100%; }
+  </style>
+</head>
+<body>
+  <div id="log">Willkommen zum Artillery-Duell!<br></div>
+  <input id="input" placeholder="Eingabe..." autofocus />
+
+  <script>
+    const log = document.getElementById('log');
+    const input = document.getElementById('input');
+
+    let step = 0;
+    let player = 1;
+    let distance = Math.floor(Math.random() * 80 + 40); // zufällige Distanz
+
+    function println(text) {
+      log.innerHTML += text + "<br>";
+      window.scrollTo(0, document.body.scrollHeight);
+    }
+
+    println(`Ziel ist ${distance} Meter entfernt.`);
+
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        const v = parseFloat(input.value);
+        input.value = '';
+
+        if (isNaN(v)) return println('Bitte Zahl eingeben.');
+
+        if (step === 0) {
+          println(`Spieler ${player}: x-Geschwindigkeit = ${v}`);
+          window.vx = v;
+          step = 1;
+          println('Jetzt y-Geschwindigkeit eingeben:');
+        } else {
+          const vy = v;
+          step = 0;
+
+          const g = 9.81;
+          const flightTime = (2 * vy) / g;
+          const range = vx * flightTime;
+
+          const diff = Math.round(range - distance);
+
+          println(`→ Projektil flog ${Math.abs(diff)} m ${diff > 0 ? 'zu weit' : 'zu kurz'}.`);
+
+          if (Math.abs(diff) < 2) {
+            println(`💥 Treffer! Spieler ${player} gewinnt!`);
+            input.disabled = true;
+          } else {
+            player = player === 1 ? 2 : 1;
+            println(`--- Spieler ${player} ist dran ---`);
+            println('x-Geschwindigkeit eingeben:');
+          }
+        }
+      }
+    });
+  </script>
+</body>
+</html>
