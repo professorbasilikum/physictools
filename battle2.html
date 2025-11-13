@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Galaktisches Ball-Duell</title>
+  <style>
+    body {
+      font-family: monospace;
+      background: #111;
+      color: #0f0;
+      padding: 20px;
+      line-height: 1.5;
+    }
+    #input {
+      background: #000;
+      color: #0f0;
+      border: 1px solid #0f0;
+      width: 100%;
+      margin-top: 12px;
+      padding: 8px;
+      font-size: 1.1em;
+    }
+  </style>
+</head>
+<body>
+  <div id="log"></div>
+  <input id="input" placeholder="Eingabe..." autofocus />
+
+  <script>
+    const log = document.getElementById('log');
+    const input = document.getElementById('input');
+
+    let phase = 'asciiChoice';
+    let showAscii = false;
+    let player1 = '', player2 = '', currentPlayer = '';
+    let level = 0;
+    let distance = 0, vx = 0;
+    let physics = {};
+
+    function println(text) {
+      log.innerHTML += text + "<br>";
+      window.scrollTo(0, document.body.scrollHeight);
+    }
+
+    function intro() {
+      println("🪐 Willkommen beim *Galaktischen Ball-Duell!*");
+      println("Hier treten zwei tapfere Ballwerfer gegeneinander an.");
+      println("Ziel: Den anderen mit einem geschickten Ballwurf zu treffen!");
+      println("<br>Ihr startet bei Level 0 – Vakuum, keine Luft, kein Wind, kein Höhenunterschied.");
+      println("Aber keine Sorge, die Fantasie-Bälle fliegen trotzdem! 😉");
+      println("<br>Möchtest du eine kleine ASCII-Flugbahn sehen?");
+      println("Dann schreibe **ja**, oder **nein** für den Pro-Modus (Papier & Stift empfohlen).");
+      phase = 'asciiChoice';
+    }
+
+    function nextLevel() {
+      level++;
+      if (level > 4) {
+        println("🎉 Ihr habt alle Level geschafft! Fantastisch geworfen!");
+        input.disabled = true;
+        return;
+      }
+      println(`<br>🌍 Level ${level} startet!`);
+      describeLevel();
+      startRound();
+    }
+
+    function describeLevel() {
+      switch (level) {
+        case 0:
+          println("LVL 0: Vakuum, Windstille, kein Höhenunterschied.");
+          println("Wie kann man sich im Vakuum mit Bällen abwerfen? Nun – diese Bälle bestehen aus purer Fantasie-Energie. Sie brauchen keine Luft, nur Vorstellungskraft!");
+          break;
+        case 1:
+          println("LVL 1: Jetzt gibt es Luft wie auf der Erde! Die Bälle werden ein bisschen gebremst.");
+          break;
+        case 2:
+          physics.wind = (Math.random() * 10 - 5);
+          println(`LVL 2: Wind kommt ins Spiel! Windgeschwindigkeit: ${physics.wind.toFixed(1)} m/s.`);
+          break;
+        case 3:
+          physics.heightDiff = Math.floor(Math.random() * 21 - 10);
+          println(`LVL 3: Höhenunterschied! Der Gegner steht ${physics.heightDiff} m ${physics.heightDiff > 0 ? 'höher' : 'tiefer'}.`);
+          break;
+        case 4:
+          physics.wind = (Math.random() * 10 - 5);
+          physics.heightDiff = Math.floor(Math.random() * 21 - 10);
+          println(`LVL 4: Alles auf einmal! Luft, Wind (${physics.wind.toFixed(1)} m/s) und Höhenunterschied (${physics.heightDiff} m).`);
+          break;
+      }
+    }
+
+    function startRound() {
+      distance = Math.floor(Math.random() * 60 + 40);
+      println(`<br>Das Ziel ist ${distance} m entfernt.`);
+      currentPlayer = player1;
+      println(`--- ${currentPlayer} ist am Zug ---`);
+      println(`${currentPlayer}, gib bitte die x-Geschwindigkeit deines Wurfs an:`);
+      phase = 'vx';
+    }
+
+    function drawAsciiFlight(vx, vy, distance, diff) {
+      const g = 9.81;
+      let output = "<pre>";
+      for (let t = 0; t < 2 * vy / g; t += 0.1) {
+        const x = vx * t;
+        const y = vy * t - 0.5 * g * t * t;
+        if (y < 0) break;
+        const spaces = ' '.repeat(Math.round(x / distance * 50));
+        output += spaces + "•\n";
+      }
+      output += "</pre>";
+      println(output);
+    }
+
+    input.addEventListener('keydown', e => {
+      if (e.key !== 'Enter') return;
+      const val = input.value.trim().toLowerCase();
+      input.value = '';
+
+      // === Startauswahl ===
+      if (phase === 'asciiChoice') {
+        if (val === 'ja' || val === 'j') {
+          showAscii = true;
+          println("ASCII-Flugbahn aktiviert! 🌀");
+        } else if (val === 'nein' || val === 'n') {
+          showAscii = false;
+          println("Pro-Modus aktiviert! Nur Text und viel Vorstellungskraft 💪");
+        } else {
+          println('Bitte "ja" oder "nein" schreiben.');
+          return;
+        }
+        println("<br>Bitte gib den Namen von Spieler 1 ein:");
+        phase = 'name1';
+      }
+
+      else if (phase === 'name1') {
+        player1 = val || "Spieler 1";
+        println(`Hallo ${player1}!`);
+        println("Bitte gib den Namen von Spieler 2 ein:");
+        phase = 'name2';
+      }
+
+      else if (phase === 'name2') {
+        player2 = val || "Spieler 2";
+        println(`Super! ${player1} und ${player2} sind bereit!`);
+        println("<br>Dann los – die Bälle warten schon!");
+        level = 0;
+        physics = {};
+        describeLevel();
+        startRound();
+      }
+
+      else if (phase === 'vx') {
+        vx = parseFloat(val);
+        if (isNaN(vx)) return println("Bitte gib eine Zahl ein.");
+        println(`${currentPlayer} hat x = ${vx} m/s gewählt.`);
+        println("Jetzt y-Geschwindigkeit eingeben:");
+        phase = 'vy';
+      }
+
+      else if (phase === 'vy') {
+        const vy = parseFloat(val);
+        if (isNaN(vy)) return println("Bitte gib eine Zahl ein.");
+        println(`${currentPlayer} hat y = ${vy} m/s gewählt.`);
+
+        // Berechnung
+        const g = 9.81;
+        let range;
+        let h = physics.heightDiff || 0;
+        let wind = physics.wind || 0;
+
+        const dragFactor = (level >= 1) ? 0.97 : 1.0;
+        const t = (vy + Math.sqrt(vy * vy + 2 * g * Math.max(0, h))) / g * 2;
+        range = (vx * t + wind * t * 0.3) * dragFactor;
+
+        const diff = Math.round(range - distance);
+
+        if (showAscii) drawAsciiFlight(vx, vy, distance, diff);
+
+        println(`→ Der Ball flog ${Math.abs(diff)} m ${diff > 0 ? 'zu weit' : 'zu kurz'}.`);
+
+        if (Math.abs(diff) < 2) {
+          println(`🎯 Treffer! ${currentPlayer} hat gewonnen!`);
+          nextLevel();
+        } else {
+          currentPlayer = (currentPlayer === player1) ? player2 : player1;
+          println(`<br>--- ${currentPlayer} ist dran ---`);
+          println(`${currentPlayer}, gib bitte die x-Geschwindigkeit deines Wurfs an:`);
+          phase = 'vx';
+        }
+      }
+    });
+
+    // Beim Laden sofort Intro anzeigen
+    intro();
+  </script>
+</body>
+</html>
