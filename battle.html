@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<title>Physik-Battle</title>
+<title>Physik Battle</title>
 <style>
     body {
         background-color: black;
@@ -11,290 +11,236 @@
         padding: 20px;
         white-space: pre-line;
     }
-    #inputField {
-        width: 100%;
-        padding: 10px;
-        font-size: 18px;
-        margin-top: 12px;
-        background: black;
+    input {
+        background-color: black;
+        border: 1px solid #00ff00;
         color: #00ff00;
-        border: 2px solid #00ff00;
         font-family: "Courier New", monospace;
+        padding: 5px;
+        width: 200px;
     }
 </style>
 </head>
 <body>
 
-<div id="gameOutput"></div>
-<input id="inputField" type="text" autofocus onkeydown="if(event.key==='Enter') handleInput()">
+<pre id="gameText"></pre>
+<input id="inputField" autocomplete="off">
 
 <script>
-// ----------------------------
-// GAME STATE
-// ----------------------------
-let state = "intro";
-let player1 = "";
-let player2 = "";
-let currentPlayer = "";
-let otherPlayer = "";
+let gameText = document.getElementById("gameText");
+let inputField = document.getElementById("inputField");
 
-let xVel = 0;
-let yVel = 0;
-
+// --- Grundmechanik ---
+let players = ["stefan", "felix"];
+let currentPlayerIndex = 0;
 let level = 1;
-let pointsP1 = 0;
-let pointsP2 = 0;
+let targetDistance = 0;
+let ballSize = "";
+let dragFactor = 1.0;
+let heightDifference = 0;
+let score = { stefan: 0, felix: 0 };
 
-let distance = 50;
-let heightDiff = 0;
+let state = "intro";
+let pendingRandomGiven = null;
 
-let givenX = null;
-let givenY = null;
-
-let airFactor = 1.0;
-let ballText = "";
-
-let output = document.getElementById("gameOutput");
-
-function print(t) {
-    output.innerText += t + "\n";
+// --- Hilfsfunktionen ---
+function log(t) {
+    gameText.textContent += t + "\n";
 }
 
-function clear() {
-    output.innerText = "";
+function waitForInput(nextState) {
+    state = nextState;
+    inputField.value = "";
+    inputField.focus();
 }
 
-// Ballgrößen: 97% / 90% / 70%
-function chooseBall(levelHasAir) {
-    if (!levelHasAir) {
-        airFactor = 1.0;
-        ballText = "Im Vakuum – kein Luftwiderstand.";
-        return;
-    }
-    let r = Math.random();
-    if (r < 0.33) {
-        airFactor = 0.97;
-        ballText = "Ihr bekommt einen kleinen Ball (wenig Luftwiderstand).";
-    } else if (r < 0.66) {
-        airFactor = 0.90;
-        ballText = "Ihr bekommt einen normalen Ball (mittelstarker Luftwiderstand).";
+// --- Physik ---
+function computeDistance(x, y, drag, height) {
+    let g = 9.81;
+    let time;
+
+    if (height === 0) {
+        time = (2 * y) / g;
     } else {
-        airFactor = 0.70;
-        ballText = "Ihr bekommt einen RIESENBALL (massiver Luftwiderstand)!";
+        // Wurf von Höhe h (vereinfachte Näherung)
+        time = (y + Math.sqrt(y*y + 2*g*(-height))) / g;
     }
-}
 
-// Sehr einfache Wurfweite, damit das Spiel spielerisch bleibt
-function simulateThrow(x, y, hasAir, hasHeight) {
-    let effX = hasAir ? x * airFactor : x;
-    let effY = hasHeight ? (y + heightDiff * 0.05) : y;
+    if (time < 0) time = 0;
 
-    let time = Math.max(0.5, effY / 5);
-    let range = effX * time;
-
-    return Math.round(range);
+    let distance = x * time * drag;
+    return Math.round(distance);
 }
 
 function startLevel() {
-    clear();
+    log("\n===============================");
+    log("              LEVEL " + level);
+    log("===============================\n");
 
-    distance = Math.floor(Math.random() * 91) + 10; // 10-100m
+    // Münzwurf
+    currentPlayerIndex = Math.random() < 0.5 ? 0 : 1;
+    log("Eine Münze entscheidet... " + players[currentPlayerIndex] + " beginnt!\n");
 
-    // Spieler wechseln
-    if (!currentPlayer) {
-        currentPlayer = player1;
-        otherPlayer = player2;
+    // Ballgröße
+    let sizes = [
+        {name: "kleinen Ball", drag: 0.97},
+        {name: "mittleren Ball", drag: 0.90},
+        {name: "riesigen Ball", drag: 0.70}
+    ];
+    let b = sizes[Math.floor(Math.random() * 3)];
+    ballSize = b.name;
+    dragFactor = b.drag;
+
+    // Distanz
+    targetDistance = Math.floor(Math.random()*91 + 10);
+
+    // Höhe je nach Level
+    if (level === 3 || level === 6) {
+        heightDifference = Math.floor(Math.random()*31 + 10); 
     } else {
-        [currentPlayer, otherPlayer] = [otherPlayer, currentPlayer];
+        heightDifference = 0;
     }
 
-    print("=========================================");
-    print(" LEVEL " + level);
-    print("=========================================\n");
-
-    print("Die Zielentfernung beträgt: " + distance + " m.\n");
-
-    // LEVELBESCHREIBUNGEN
-    switch(level) {
-        case 1:
-            chooseBall(false);
-            print("Szene: Ihr steht auf einer vollkommen ruhigen Ebene im leeren Raum.");
-            print("Magiebälle funktionieren auch im Vakuum!");
-            print(ballText);
-            print("\nBitte gib x-Geschwindigkeit ein:");
-            state = "askX";
-            break;
-
-        case 2:
-            chooseBall(true);
-            print("Szene: Ein leichter Windhauch… und plötzlich ist überall Luft!");
-            print("Der Ball wird nun abgebremst.");
-            print(ballText);
-            print("\nBitte gib x-Geschwindigkeit ein:");
-            state = "askX";
-            break;
-
-        case 3:
-            chooseBall(false);
-            heightDiff = Math.floor(Math.random()*21 - 10);
-            print("Szene: Ihr steht auf einem Turm und werft den Ball hinunter… oder hinauf!");
-            print("Höhenunterschied: " + heightDiff + " m.");
-            print(ballText);
-            print("\nBitte gib x-Geschwindigkeit ein:");
-            state = "askX";
-            break;
-
-        case 4:
-            chooseBall(false);
-            if (Math.random() < 0.5) {
-                givenY = Math.floor(Math.random()*46 + 5);
-                print("Der Computer sagt: Die y-Geschwindigkeit ist fix: y = " + givenY + " m/s.");
-                print("Finde die passende x-Geschwindigkeit!");
-                state = "askX_forcedY";
-            } else {
-                givenX = Math.floor(Math.random()*46 + 5);
-                print("Der Computer sagt: Die x-Geschwindigkeit ist fix: x = " + givenX + " m/s.");
-                print("Finde die passende y-Geschwindigkeit!");
-                state = "askY_forcedX";
-            }
-            break;
-
-        case 5:
-            chooseBall(true);
-            if (Math.random() < 0.5) {
-                givenY = Math.floor(Math.random()*46 + 5);
-                print("Wind, Luft – und der Computer fixiert y = " + givenY + ".");
-                state = "askX_forcedY";
-            } else {
-                givenX = Math.floor(Math.random()*46 + 5);
-                print("Wind, Luft – und der Computer fixiert x = " + givenX + ".");
-                state = "askY_forcedX";
-            }
-            break;
-
-        case 6:
-            chooseBall(false);
-            heightDiff = Math.floor(Math.random()*21 - 10);
-            if (Math.random() < 0.5) {
-                givenY = Math.floor(Math.random()*46 + 5);
-                print("Ihr seid wieder auf einem Turm – diesmal „Würfe mit Vorgabe“!");
-                print("Der Computer fixiert y = " + givenY + ".");
-                print("Höhenunterschied: " + heightDiff + " m.");
-                state = "askX_forcedY";
-            } else {
-                givenX = Math.floor(Math.random()*46 + 5);
-                print("Ihr seid wieder auf einem Turm – diesmal „Würfe mit Vorgabe“!");
-                print("Der Computer fixiert x = " + givenX + ".");
-                print("Höhenunterschied: " + heightDiff + " m.");
-                state = "askY_forcedX";
-            }
-            break;
+    // Szene
+    if (level === 1) {
+        log("Szene: Ihr steht auf einer vollkommen ruhigen Ebene im leeren Raum.");
+        log("Magiebälle funktionieren auch im Vakuum!");
+    }
+    if (level === 2) {
+        log("Szene: Ein mächtiger Windgeist erwacht. Luft ist plötzlich überall!");
+        log("Mit Luftwiderstand!");
+    }
+    if (level === 3) {
+        log("Szene: Ihr steht auf einem hohen Turm. Unter euch gähnt der Abgrund.");
+        log("Im Vakuum – kein Luftwiderstand.");
+    }
+    if (level === 4) {
+        log("Szene: Ein alter Magier verrät euch einen Teil der Lösung…");
+        log("Keine Luft, flache Ebene.");
+    }
+    if (level === 5) {
+        log("Szene: Der Magier flüstert wieder einen Wert… doch diesmal in Luft!");
+    }
+    if (level === 6) {
+        log("Szene: Der Magier steht auf eurem Turm und ruft euch einen Wert zu!");
+        log("Vakuum, aber mit Höhenunterschied.");
     }
 
-    print("\n--- " + currentPlayer + " ist am Zug ---");
+    log("\nZieldistanz: " + targetDistance + " m");
+    log("Ihr werft einen " + ballSize + " (Drag: " + (dragFactor*100).toFixed(0) + "%)\n");
+
+    // Random Vorgaben abhängig vom Level (4–6)
+    if (level >= 4) {
+        if (Math.random() < 0.5) {
+            pendingRandomGiven = "x";
+            let r = Math.floor(Math.random()*46 + 5);
+            log("Der Magier sagt euch: x = " + r + " m/s ist FIX!");
+            log("Berechne y so, dass du triffst!\n");
+            currentX = r;
+            waitForInput("askYonly");
+        } else {
+            pendingRandomGiven = "y";
+            let r = Math.floor(Math.random()*46 + 5);
+            log("Der Magier ruft: y = " + r + " m/s ist SCHICKSAL!");
+            log("Berechne x passend dazu!\n");
+            currentY = r;
+            waitForInput("askXonly");
+        }
+    } else {
+        pendingRandomGiven = null;
+        askX();
+    }
 }
 
-function resolveThrow(x, y, hasAir, hasHeight) {
-    let landed = simulateThrow(x, y, hasAir, hasHeight);
-    let diff = landed - distance;
+let currentX = null;
+let currentY = null;
+
+// --- Eingabe-Ablauf ---
+function askX() {
+    log("\n--- " + players[currentPlayerIndex] + " ist am Zug ---");
+    log(players[currentPlayerIndex] + ", gib x-Geschwindigkeit ein:");
+    waitForInput("inputX");
+}
+
+function askY() {
+    log("Jetzt y:");
+    waitForInput("inputY");
+}
+
+function evaluateThrow() {
+    let dist = computeDistance(currentX, currentY, dragFactor, -heightDifference);
+    let diff = dist - targetDistance;
 
     if (diff === 0) {
-        print("\n💥 TREFFER! Punkt für " + currentPlayer + "!");
-
-        if (currentPlayer === player1) pointsP1 += level;
-        else pointsP2 += level;
-
-        print("\nPunktestand:");
-        print(player1 + ": " + pointsP1 + " Punkte");
-        print(player2 + ": " + pointsP2 + " Punkte\n");
-
-        level++;
-        if (level > 6) {
-            print("\n🎉 Alle Level abgeschlossen!");
-            return;
-        }
-        startLevel();
+        log("\n★★ PERFEKTER TREFFER! ★★");
+        score[players[currentPlayerIndex]] += level;
+        log(players[currentPlayerIndex] + " bekommt " + level + " Punkte!\n");
+        nextLevel();
         return;
     }
 
-    if (diff > 0)
-        print("\n→ Der Ball war " + diff + " m zu WEIT.");
-    else
-        print("\n→ Der Ball war " + Math.abs(diff) + " m zu KURZ.");
+    if (diff > 0) {
+        log("\n→ Der Ball war " + diff + " m zu WEIT.");
+    } else {
+        log("\n→ Der Ball war " + Math.abs(diff) + " m zu KURZ.");
+    }
 
     // Spielerwechsel
-    [currentPlayer, otherPlayer] = [otherPlayer, currentPlayer];
-    print("\n--- " + currentPlayer + " ist dran ---");
-}
+    currentPlayerIndex = 1 - currentPlayerIndex;
 
-function handleInput() {
-    let input = document.getElementById("inputField").value.trim();
-    document.getElementById("inputField").value = "";
-
-    switch(state) {
-        case "intro":
-            clear();
-            print("WILLKOMMEN ZUM PHYSIK-BATTLE!\n");
-            print("Ihr werft euch Bälle zu – oder eher: Ihr versucht euch GEZIELT zu treffen!");
-            print("Jedes Level hat andere physikalische Bedingungen.");
-            print("Wer trifft, bekommt Punkte (Levelnummer = Punkte).");
-            print("Wer am Ende mehr Punkte hat, gewinnt!\n");
-            print("Spieler 1: Wie heißt du?");
-            state = "askP1";
-            break;
-
-        case "askP1":
-            player1 = input;
-            print("\nHallo " + player1 + "!");
-            print("Spieler 2: Wie heißt du?");
-            state = "askP2";
-            break;
-
-        case "askP2":
-            player2 = input;
-            clear();
-            print("Willkommen " + player1 + " und " + player2 + "!");
-            startLevel();
-            break;
-
-        // Normale Eingabe: x und y
-        case "askX":
-            xVel = parseFloat(input);
-            print(currentPlayer + " wählt x = " + xVel);
-            print("Jetzt y:");
-            state = "askY";
-            break;
-
-        case "askY":
-            yVel = parseFloat(input);
-            print(currentPlayer + " wählt y = " + yVel);
-
-            let hasAir = (level === 2 || level === 5);
-            let hasHeight = (level === 3 || level === 6);
-
-            resolveThrow(xVel, yVel, hasAir, hasHeight);
-            break;
-
-        // Vorgegeben: y ist fix
-        case "askX_forcedY":
-            xVel = parseFloat(input);
-            print(currentPlayer + " wählt x = " + xVel);
-
-            resolveThrow(xVel, givenY, level===5, level===6);
-            givenY = null;
-            break;
-
-        // Vorgegeben: x ist fix
-        case "askY_forcedX":
-            yVel = parseFloat(input);
-            print(currentPlayer + " wählt y = " + yVel);
-
-            resolveThrow(givenX, yVel, level===5, level===6);
-            givenX = null;
-            break;
+    // Je nach Level wieder x->y oder spezielle Eingabe
+    if (pendingRandomGiven === "x") {
+        waitForInput("askYonly");
+    } else if (pendingRandomGiven === "y") {
+        waitForInput("askXonly");
+    } else {
+        askX();
     }
 }
 
+function nextLevel() {
+    level++;
+    if (level > 6) {
+        log("Spiel ENDE! Punkte:");
+        log("stefan: " + score.stefan);
+        log("felix: " + score.felix);
+        return;
+    }
+    startLevel();
+}
+
+// --- Input Handler ---
+inputField.addEventListener("keydown", function(e) {
+    if (e.key === "Enter") {
+        let val = inputField.value.trim();
+
+        if (state === "intro") {
+            log("Willkommen zum Physik-Battle!\n");
+            startLevel();
+        }
+
+        else if (state === "inputX") {
+            currentX = parseFloat(val);
+            askY();
+        }
+
+        else if (state === "inputY") {
+            currentY = parseFloat(val);
+            evaluateThrow();
+        }
+
+        else if (state === "askXonly") {
+            currentX = parseFloat(val);
+            evaluateThrow();
+        }
+
+        else if (state === "askYonly") {
+            currentY = parseFloat(val);
+            evaluateThrow();
+        }
+    }
+});
 </script>
+
 </body>
 </html>
