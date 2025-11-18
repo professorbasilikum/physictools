@@ -2,245 +2,366 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<title>Physik Battle</title>
+<title>Magischer Wurfkampf</title>
 <style>
     body {
         background-color: black;
         color: #00ff00;
-        font-family: "Courier New", monospace;
+        font-family: "Consolas", monospace;
         padding: 20px;
-        white-space: pre-line;
+        white-space: pre-wrap;
     }
     input {
-        background-color: black;
-        border: 1px solid #00ff00;
-        color: #00ff00;
-        font-family: "Courier New", monospace;
+        font-size: 20px;
+        margin-top: 10px;
         padding: 5px;
-        width: 200px;
+        background: #002200;
+        border: 2px solid #00ff00;
+        color: #00ff00;
     }
 </style>
 </head>
 <body>
 
-<pre id="gameText"></pre>
+<div id="game"></div>
 <input id="inputField" autocomplete="off">
 
 <script>
-let gameText = document.getElementById("gameText");
-let inputField = document.getElementById("inputField");
+/* =========================================================
+   GLOBALE VARIABLEN
+   ========================================================= */
 
-// --- Grundmechanik ---
-let players = ["stefan", "felix"];
-let currentPlayerIndex = 0;
+let g = 9.81;
+let players = [];
+let currentPlayer = 0;
 let level = 1;
-let targetDistance = 0;
-let ballSize = "";
-let dragFactor = 1.0;
+let awaiting = "intro";
+let inputField = document.getElementById("inputField");
+let game = document.getElementById("game");
+
+let xGiven = null;
+let yGiven = null;
+
+let distanceToTarget = 0;
 let heightDifference = 0;
-let score = { stefan: 0, felix: 0 };
 
-let state = "intro";
-let pendingRandomGiven = null;
+let ballSize = ""; 
+let dragFactor = 1.0;
 
-// --- Hilfsfunktionen ---
-function log(t) {
-    gameText.textContent += t + "\n";
+let scores = [0, 0]; // Punkte der Spieler
+
+/* =========================================================
+   HILFSFUNKTIONEN
+   ========================================================= */
+
+function log(t){
+    game.innerHTML += t + "\n";
+    window.scrollTo(0, document.body.scrollHeight);
 }
 
-function waitForInput(nextState) {
-    state = nextState;
-    inputField.value = "";
-    inputField.focus();
+function coinFlip(){
+    return Math.random() < 0.5 ? 0 : 1;
 }
 
-// --- Physik ---
-function computeDistance(x, y, drag, height) {
-    let g = 9.81;
+/* Ballgrößen */
+function chooseBall(){
+    let r = Math.random();
+    if(r < 0.33){
+        ballSize = "kleinen Ball";
+        dragFactor = 0.97;
+    } else if(r < 0.66){
+        ballSize = "mittleren Ball";
+        dragFactor = 0.90;
+    } else {
+        ballSize = "riesigen Ball";
+        dragFactor = 0.70;
+    }
+}
+
+/* Distanz 10–100 m */
+function chooseDistance(){
+    distanceToTarget = Math.floor(Math.random()*91)+10;
+}
+
+/* Höhenunterschied */
+function chooseHeight(){
+    heightDifference = Math.floor(Math.random()*31) - 15; // -15 bis +15 m
+}
+
+/* Physik: vereinfachte Reichweite */
+function computeRange(vx, vy, drag, height){
+    // Flugzeit abhängig von Höhe
     let time;
 
-    if (height === 0) {
-        time = (2 * y) / g;
+    if(height === 0){
+        // Normaler Wurf
+        time = (2 * vy) / g;
+        if(time < 0) time = 0;
     } else {
-        // Wurf von Höhe h (vereinfachte Näherung)
-        time = (y + Math.sqrt(y*y + 2*g*(-height))) / g;
+        // Wurf mit Höhenunterschied
+        // Formel: y(t)= vy*t - 0.5*g*t² = -height
+        // → t = (vy + sqrt(vy² + 2*g*height)) / g
+        let disc = vy*vy + 2*g*(height);
+        if(disc < 0) return 0;
+        time = (vy + Math.sqrt(disc)) / g;
     }
 
-    if (time < 0) time = 0;
+    if(time < 0) time = 0;
 
-    let distance = x * time * drag;
-    return Math.round(distance);
+    // Drag wirkt nur auf x
+    let effectiveVX = vx * drag;
+
+    return effectiveVX * time;
 }
 
-function startLevel() {
-    log("\n===============================");
-    log("              LEVEL " + level);
-    log("===============================\n");
+/* Startet ein Level komplett neu */
+function startLevel(){
+    game.innerHTML += "\n===============================\n";
+    game.innerHTML += "             LEVEL " + level + "\n";
+    game.innerHTML += "===============================\n\n";
 
-    // Münzwurf
-    currentPlayerIndex = Math.random() < 0.5 ? 0 : 1;
-    log("Eine Münze entscheidet... " + players[currentPlayerIndex] + " beginnt!\n");
+    chooseBall();
+    chooseDistance();
 
-    // Ballgröße
-    let sizes = [
-        {name: "kleinen Ball", drag: 0.97},
-        {name: "mittleren Ball", drag: 0.90},
-        {name: "riesigen Ball", drag: 0.70}
-    ];
-    let b = sizes[Math.floor(Math.random() * 3)];
-    ballSize = b.name;
-    dragFactor = b.drag;
+    let starter = coinFlip();
+    currentPlayer = starter;
 
-    // Distanz
-    targetDistance = Math.floor(Math.random()*91 + 10);
+    /* Szenen / Einstellungen je Level */
+    switch(level){
 
-    // Höhe je nach Level
-    if (level === 3 || level === 6) {
-        heightDifference = Math.floor(Math.random()*31 + 10); 
-    } else {
-        heightDifference = 0;
+        case 1:
+            heightDifference = 0;
+            dragFactor = 1.0;
+            log("Eine Münze entscheidet... " + players[currentPlayer] + " beginnt!\n");
+            log("Szene: Ihr steht auf einer ruhigen Ebene, im völligen Vakuum.");
+            log("Magiebälle funktionieren auch im luftleeren Raum!");
+            log("Kein Luftwiderstand.\n");
+            log("Zieldistanz: " + distanceToTarget + " m");
+            log("Ihr werft einen " + ballSize + " (Drag ignoriert, da Vakuum).\n");
+        break;
+
+        case 2:
+            heightDifference = 0;
+            log("Eine Münze entscheidet... " + players[currentPlayer] + " beginnt!\n");
+            log("Szene: Ein mächtiger Windgeist erwacht – überall Luft!");
+            log("Mit Luftwiderstand!\n");
+            log("Zieldistanz: " + distanceToTarget + " m");
+            log("Ihr werft einen " + ballSize + " (Drag: " + Math.round(dragFactor*100) + "%)\n");
+        break;
+
+        case 3:
+            chooseHeight();
+            dragFactor = 1.0; // Luftleer!
+            log("Eine Münze entscheidet... " + players[currentPlayer] + " beginnt!\n");
+            log("Szene: Ihr steht auf einem hohen Turm – alles ist wieder luftleer!");
+            log("Kein Luftwiderstand.\n");
+            log("Höhenunterschied: " + heightDifference + " m");
+            log("Zieldistanz: " + distanceToTarget + " m");
+            log("Ihr werft einen " + ballSize + " (Drag ignoriert).\n");
+        break;
+
+        case 4:
+            heightDifference = 0;
+            dragFactor = 1.0;
+            xGiven = null; yGiven = null;
+            if(Math.random() < 0.5){
+                xGiven = Math.floor(Math.random()*46)+5;
+                log("Eine Münze entscheidet... " + players[currentPlayer] + " beginnt!\n");
+                log("Szene: Ein mystischer Automat stellt die horizontale Geschwindigkeit ein!");
+                log("Du musst y selbst wählen.\n");
+                log(" Vorgegeben: x = " + xGiven + " m/s");
+            } else {
+                yGiven = Math.floor(Math.random()*46)+5;
+                log("Eine Münze entscheidet... " + players[currentPlayer] + " beginnt!\n");
+                log("Szene: Ein magischer Stein schubst euren Ball genau mit einer bestimmten Höhe!");
+                log("Du musst x selbst wählen.\n");
+                log(" Vorgegeben: y = " + yGiven + " m/s");
+            }
+            log("\nKein Luftwiderstand.");
+            log("Zieldistanz: " + distanceToTarget + " m\n");
+        break;
+
+        case 5:
+            heightDifference = 0;
+            xGiven = null; yGiven = null;
+            if(Math.random() < 0.5){
+                xGiven = Math.floor(Math.random()*46)+5;
+                log("Eine Münze entscheidet... " + players[currentPlayer] + " beginnt!\n");
+                log("Szene: Windige Arena! Der Automat stellt x ein, du wählst y.\n");
+                log(" Vorgegeben: x = " + xGiven + " m/s");
+            } else {
+                yGiven = Math.floor(Math.random()*46)+5;
+                log("Eine Münze entscheidet... " + players[currentPlayer] + " beginnt!\n");
+                log("Szene: Windige Arena! Ein Zauber setzt y, du wählst x.\n");
+                log(" Vorgegeben: y = " + yGiven + " m/s");
+            }
+            log("Mit Luftwiderstand! Drag: " + Math.round(dragFactor*100) + "%");
+            log("Zieldistanz: " + distanceToTarget + " m\n");
+        break;
+
+        case 6:
+            chooseHeight();
+            dragFactor = 1.0; // Höhe, aber Vakuum!
+            xGiven = null; yGiven = null;
+            if(Math.random() < 0.5){
+                xGiven = Math.floor(Math.random()*46)+5;
+                log("Eine Münze entscheidet... " + players[currentPlayer] + " beginnt!\n");
+                log("Szene: Auf einem Turm! x ist vorgegeben, du wählst y.\n");
+                log(" Vorgegeben: x = " + xGiven + " m/s");
+            } else {
+                yGiven = Math.floor(Math.random()*46)+5;
+                log("Eine Münze entscheidet... " + players[currentPlayer] + " beginnt!\n");
+                log("Szene: Auf einem Turm! y ist vorgegeben, du wählst x.\n");
+                log(" Vorgegeben: y = " + yGiven + " m/s");
+            }
+            log("Kein Luftwiderstand.");
+            log("Höhenunterschied: " + heightDifference + " m");
+            log("Zieldistanz: " + distanceToTarget + " m\n");
+        break;
     }
 
-    // Szene
-    if (level === 1) {
-        log("Szene: Ihr steht auf einer vollkommen ruhigen Ebene im leeren Raum.");
-        log("Magiebälle funktionieren auch im Vakuum!");
-    }
-    if (level === 2) {
-        log("Szene: Ein mächtiger Windgeist erwacht. Luft ist plötzlich überall!");
-        log("Mit Luftwiderstand!");
-    }
-    if (level === 3) {
-        log("Szene: Ihr steht auf einem hohen Turm. Unter euch gähnt der Abgrund.");
-        log("Im Vakuum – kein Luftwiderstand.");
-    }
-    if (level === 4) {
-        log("Szene: Ein alter Magier verrät euch einen Teil der Lösung…");
-        log("Keine Luft, flache Ebene.");
-    }
-    if (level === 5) {
-        log("Szene: Der Magier flüstert wieder einen Wert… doch diesmal in Luft!");
-    }
-    if (level === 6) {
-        log("Szene: Der Magier steht auf eurem Turm und ruft euch einen Wert zu!");
-        log("Vakuum, aber mit Höhenunterschied.");
-    }
-
-    log("\nZieldistanz: " + targetDistance + " m");
-    log("Ihr werft einen " + ballSize + " (Drag: " + (dragFactor*100).toFixed(0) + "%)\n");
-
-    // Random Vorgaben abhängig vom Level (4–6)
-    if (level >= 4) {
-        if (Math.random() < 0.5) {
-            pendingRandomGiven = "x";
-            let r = Math.floor(Math.random()*46 + 5);
-            log("Der Magier sagt euch: x = " + r + " m/s ist FIX!");
-            log("Berechne y so, dass du triffst!\n");
-            currentX = r;
-            waitForInput("askYonly");
-        } else {
-            pendingRandomGiven = "y";
-            let r = Math.floor(Math.random()*46 + 5);
-            log("Der Magier ruft: y = " + r + " m/s ist SCHICKSAL!");
-            log("Berechne x passend dazu!\n");
-            currentY = r;
-            waitForInput("askXonly");
-        }
-    } else {
-        pendingRandomGiven = null;
-        askX();
-    }
+    requestX();
 }
 
-let currentX = null;
-let currentY = null;
+/* =========================================================
+   EINGABE-ABFRAGEN
+   ========================================================= */
 
-// --- Eingabe-Ablauf ---
-function askX() {
-    log("\n--- " + players[currentPlayerIndex] + " ist am Zug ---");
-    log(players[currentPlayerIndex] + ", gib x-Geschwindigkeit ein:");
-    waitForInput("inputX");
+function requestX(){
+    let p = players[currentPlayer];
+    log("\n--- " + p + " ist am Zug ---");
+    if(xGiven !== null){
+        log("x ist vorgegeben: " + xGiven + " m/s");
+        requestY();
+        return;
+    }
+    log(p + ", gib x-Geschwindigkeit ein:");
+    awaiting = "x";
 }
 
-function askY() {
+function requestY(){
+    let p = players[currentPlayer];
+    if(yGiven !== null){
+        log("y ist vorgegeben: " + yGiven + " m/s");
+        evaluateThrow();
+        return;
+    }
     log("Jetzt y:");
-    waitForInput("inputY");
+    awaiting = "y";
 }
 
-function evaluateThrow() {
-    let dist = computeDistance(currentX, currentY, dragFactor, -heightDifference);
-    let diff = dist - targetDistance;
+/* =========================================================
+   WURF AUSWERTEN
+   ========================================================= */
 
-    if (diff === 0) {
-        log("\n★★ PERFEKTER TREFFER! ★★");
-        score[players[currentPlayerIndex]] += level;
-        log(players[currentPlayerIndex] + " bekommt " + level + " Punkte!\n");
+function evaluateThrow(){
+
+    let p = players[currentPlayer];
+
+    let vx = (xGiven !== null ? xGiven : xInput);
+    let vy = (yGiven !== null ? yGiven : yInput);
+
+    log(p + " hat gewählt:  x=" + vx + " m/s   y=" + vy + " m/s\n");
+
+    let dist = computeRange(vx, vy, dragFactor, heightDifference);
+
+    let diff = Math.round(dist - distanceToTarget);
+
+    if(diff === 0){
+        log("🎯 PERFEKTER TREFFER!");
+        scores[currentPlayer] += level;
         nextLevel();
         return;
     }
 
-    if (diff > 0) {
-        log("\n→ Der Ball war " + diff + " m zu WEIT.");
+    if(diff < 0){
+        log("→ Der Ball war " + Math.abs(diff) + " m zu KURZ.\n");
     } else {
-        log("\n→ Der Ball war " + Math.abs(diff) + " m zu KURZ.");
+        log("→ Der Ball war " + diff + " m zu WEIT.\n");
     }
 
     // Spielerwechsel
-    currentPlayerIndex = 1 - currentPlayerIndex;
-
-    // Je nach Level wieder x->y oder spezielle Eingabe
-    if (pendingRandomGiven === "x") {
-        waitForInput("askYonly");
-    } else if (pendingRandomGiven === "y") {
-        waitForInput("askXonly");
-    } else {
-        askX();
-    }
+    currentPlayer = (currentPlayer === 0 ? 1 : 0);
+    requestX();
 }
 
-function nextLevel() {
+/* =========================================================
+   LEVEL WECHSEL
+   ========================================================= */
+
+function nextLevel(){
     level++;
-    if (level > 6) {
-        log("Spiel ENDE! Punkte:");
-        log("stefan: " + score.stefan);
-        log("felix: " + score.felix);
+    if(level > 6){
+        log("\n=== SPIEL ENDE ===");
+        log(players[0] + ": " + scores[0] + " Punkte");
+        log(players[1] + ": " + scores[1] + " Punkte");
         return;
     }
     startLevel();
 }
 
-// --- Input Handler ---
-inputField.addEventListener("keydown", function(e) {
-    if (e.key === "Enter") {
+/* =========================================================
+   EINGABE LOGIK
+   ========================================================= */
+
+let xInput = 0;
+let yInput = 0;
+
+inputField.addEventListener("keydown", function(e){
+    if(e.key === "Enter"){
         let val = inputField.value.trim();
+        inputField.value = "";
 
-        if (state === "intro") {
-            log("Willkommen zum Physik-Battle!\n");
+        if(awaiting === "intro"){
+            // Erklärung sichtbar, jetzt Namen abfragen
+            log("Willkommen beim Magischen Wurfkampf!\n");
+            log("Hier duelliert ihr euch mit magischen Bällen,\ndie je nach Level anders fliegen.");
+            log("Manchmal herrscht Vakuum, manchmal Wind,\nmanchmal steht ihr auf einem Turm.\n");
+            log("Gebt jetzt eure Namen ein.\n");
+            log("Spieler 1:");
+            awaiting = "p1";
+            return;
+        }
+
+        if(awaiting === "p1"){
+            players[0] = val;
+            log("Hallo " + val + "!\nSpieler 2:");
+            awaiting = "p2";
+            return;
+        }
+
+        if(awaiting === "p2"){
+            players[1] = val;
+            log("Hallo " + val + "!");
+            awaiting = null;
             startLevel();
+            return;
         }
 
-        else if (state === "inputX") {
-            currentX = parseFloat(val);
-            askY();
+        if(awaiting === "x"){
+            xInput = parseFloat(val);
+            if(isNaN(xInput)) {
+                log("Bitte eine Zahl eingeben.");
+                return;
+            }
+            requestY();
+            return;
         }
 
-        else if (state === "inputY") {
-            currentY = parseFloat(val);
+        if(awaiting === "y"){
+            yInput = parseFloat(val);
+            if(isNaN(yInput)) {
+                log("Bitte eine Zahl eingeben.");
+                return;
+            }
             evaluateThrow();
-        }
-
-        else if (state === "askXonly") {
-            currentX = parseFloat(val);
-            evaluateThrow();
-        }
-
-        else if (state === "askYonly") {
-            currentY = parseFloat(val);
-            evaluateThrow();
+            return;
         }
     }
 });
-</script>
 
+/* FIRST START */
+log("Drücke ENTER, um zu beginnen.");
+</script>
 </body>
 </html>
